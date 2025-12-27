@@ -1,0 +1,41 @@
+# Environment files
+.env
+.env.local
+.env.production
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfvars
+!terraform/*.tfvars.example
+
+# Docker
+docker-compose.override.yml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Backup files
+*.backup
+*.bak
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+
+data/

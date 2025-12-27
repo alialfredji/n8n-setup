@@ -1,0 +1,29 @@
+# Hetzner Cloud API Token
+hcloud_token = "your_hetzner_api_token_here"
+
+# Cloudflare Configuration
+cloudflare_api_token = "your_cloudflare_api_token_here"
+cloudflare_zone_id   = "your_cloudflare_zone_id_here"
+
+# Domain Configuration
+domain = "n8n.yourdomain.com"
+
+# SSH Configuration
+ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your_ssh_public_key_here"
+
+# Server Configuration
+server_name     = "n8n-server"
+server_type     = "cx23"
+server_location = "nbg1"
+
+# n8n Configuration (generate with: openssl rand -hex 32)
+n8n_encryption_key       = "generate_with_openssl_rand_hex_32"
+n8n_jwt_secret           = "generate_with_openssl_rand_hex_32"
+n8n_basic_auth_user      = "admin"
+n8n_basic_auth_password  = "change_me_to_secure_password"
+
+# PostgreSQL Configuration
+postgres_db       = "n8n"
+postgres_user     = "n8n"
+postgres_password = "change_me_to_secure_password"
+

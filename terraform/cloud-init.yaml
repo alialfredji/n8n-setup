@@ -1,0 +1,183 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - fail2ban
+  - unattended-upgrades
+  - ufw
+
+write_files:
+  - path: /root/.env
+    permissions: '0600'
+    content: |
+      # n8n Configuration
+      N8N_ENCRYPTION_KEY=${n8n_encryption_key}
+      N8N_USER_MANAGEMENT_JWT_SECRET=${n8n_jwt_secret}
+      N8N_BASIC_AUTH_ACTIVE=true
+      N8N_BASIC_AUTH_USER=${n8n_basic_auth_user}
+      N8N_BASIC_AUTH_PASSWORD=${n8n_basic_auth_password}
+      
+      # PostgreSQL Configuration
+      POSTGRES_DB=${postgres_db}
+      POSTGRES_USER=${postgres_user}
+      POSTGRES_PASSWORD=${postgres_password}
+      
+      # Domain Configuration
+      DOMAIN=${domain}
+
+  - path: /root/docker-compose.yml
+    permissions: '0644'
+    content: |
+      services:
+        caddy:
+          image: caddy:2-alpine
+          container_name: caddy
+          restart: unless-stopped
+          ports:
+            - "80:80"
+            - "443:443"
+          volumes:
+            - /root/Caddyfile:/etc/caddy/Caddyfile
+            - caddy_data:/data
+            - caddy_config:/config
+          networks:
+            - app-network
+          depends_on:
+            - n8n
+
+        postgres:
+          image: postgres:17-alpine
+          container_name: n8n_postgres
+          restart: unless-stopped
+          environment:
+            - POSTGRES_DB=$${POSTGRES_DB}
+            - POSTGRES_USER=$${POSTGRES_USER}
+            - POSTGRES_PASSWORD=$${POSTGRES_PASSWORD}
+          volumes:
+            - postgres_data:/var/lib/postgresql/data
+          networks:
+            - app-network
+          healthcheck:
+            test: ["CMD-SHELL", "pg_isready -h localhost -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+        n8n:
+          image: docker.n8n.io/n8nio/n8n:latest
+          container_name: n8n
+          restart: unless-stopped
+          environment:
+            - DB_TYPE=postgresdb
+            - DB_POSTGRESDB_HOST=postgres
+            - DB_POSTGRESDB_PORT=5432
+            - DB_POSTGRESDB_DATABASE=$${POSTGRES_DB}
+            - DB_POSTGRESDB_USER=$${POSTGRES_USER}
+            - DB_POSTGRESDB_PASSWORD=$${POSTGRES_PASSWORD}
+            - N8N_ENCRYPTION_KEY=$${N8N_ENCRYPTION_KEY}
+            - N8N_USER_MANAGEMENT_JWT_SECRET=$${N8N_USER_MANAGEMENT_JWT_SECRET}
+            - N8N_BASIC_AUTH_ACTIVE=$${N8N_BASIC_AUTH_ACTIVE}
+            - N8N_BASIC_AUTH_USER=$${N8N_BASIC_AUTH_USER}
+            - N8N_BASIC_AUTH_PASSWORD=$${N8N_BASIC_AUTH_PASSWORD}
+            - N8N_HOST=$${DOMAIN}
+            - N8N_PROTOCOL=https
+            - WEBHOOK_URL=https://$${DOMAIN}
+          volumes:
+            - n8n_data:/home/node/.n8n
+          networks:
+            - app-network
+          depends_on:
+            postgres:
+              condition: service_healthy
+
+      networks:
+        app-network:
+          driver: bridge
+
+      volumes:
+        caddy_data:
+        caddy_config:
+        postgres_data:
+        n8n_data:
+
+  - path: /root/Caddyfile
+    permissions: '0644'
+    content: |
+      ${domain} {
+          reverse_proxy n8n:5678
+      }
+
+  - path: /root/backup.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      
+      BACKUP_DIR="/root/backups"
+      TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+      BACKUP_FILE="$BACKUP_DIR/n8n_backup_$TIMESTAMP.sql.gz"
+      RETENTION_DAYS=30
+      
+      # Create backup directory
+      mkdir -p "$BACKUP_DIR"
+      
+      # Backup PostgreSQL database
+      docker exec n8n_postgres pg_dump -U ${postgres_user} ${postgres_db} | gzip > "$BACKUP_FILE"
+      
+      # Backup n8n data volume
+      docker run --rm -v n8n_data:/data -v "$BACKUP_DIR:/backup" alpine tar czf "/backup/n8n_data_$TIMESTAMP.tar.gz" -C /data .
+      
+      # Delete old backups
+      find "$BACKUP_DIR" -name "n8n_backup_*.sql.gz" -mtime +$RETENTION_DAYS -delete
+      find "$BACKUP_DIR" -name "n8n_data_*.tar.gz" -mtime +$RETENTION_DAYS -delete
+      
+      echo "Backup completed: $BACKUP_FILE"
+
+runcmd:
+  # Configure UFW firewall
+  - ufw --force enable
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+
+  # Configure fail2ban
+  - systemctl enable fail2ban
+  - systemctl start fail2ban
+
+  # Configure unattended-upgrades
+  - echo 'APT::Periodic::Update-Package-Lists "1";' > /etc/apt/apt.conf.d/20auto-upgrades
+  - echo 'APT::Periodic::Unattended-Upgrade "1";' >> /etc/apt/apt.conf.d/20auto-upgrades
+  - echo 'APT::Periodic::AutocleanInterval "7";' >> /etc/apt/apt.conf.d/20auto-upgrades
+
+  # Install Docker
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+  # Enable Docker service
+  - systemctl enable docker
+  - systemctl start docker
+
+  # Disable password authentication for SSH
+  - sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - systemctl restart sshd
+
+  # Start Docker Compose services
+  - cd /root && docker compose up -d
+
+  # Configure backup cron job (daily at 2 AM)
+  - echo "0 2 * * * /root/backup.sh >> /var/log/n8n-backup.log 2>&1" | crontab -
+
+final_message: "n8n server setup complete!"
+
