@@ -9,6 +9,9 @@ cloudflare_zone_id   = "your_cloudflare_zone_id_here"
 domain = "n8n.yourdomain.com"
 
 # SSH Configuration
+# Paste the content of your id_rsa.pub file here
+# Generate with: ssh-keygen -t rsa -b 4096 -f ./id_rsa -C "your_email@example.com"
+# Then copy with: cat id_rsa.pub
 ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your_ssh_public_key_here"
 
 # Server Configuration

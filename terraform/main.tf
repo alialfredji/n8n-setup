@@ -89,7 +89,7 @@ resource "hcloud_server" "n8n" {
 }
 
 # Cloudflare DNS Record
-resource "cloudflare_record" "n8n" {
+resource "cloudflare_dns_record" "n8n" {
   zone_id = var.cloudflare_zone_id
   name    = split(".", var.domain)[0]
   content = hcloud_server.n8n.ipv4_address

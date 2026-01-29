@@ -56,7 +56,9 @@ Caddy (ports 80, 443)
    - [Create token here](https://dash.cloudflare.com/profile/api-tokens)
 
 3. **SSH Key Pair**
-   - Generate if needed: `ssh-keygen -t rsa -b 4096 -C "your_email@example.com"`
+   - Generate if needed: `ssh-keygen -t rsa -b 4096 -f ./id_rsa -C "your_email@example.com"`
+   - This creates `id_rsa` (private key) and `id_rsa.pub` (public key) in the repo root
+   - Both files are automatically git-ignored for security
 
 ## Quick Start
 
@@ -128,7 +130,7 @@ cloudflare_zone_id   = "your_cloudflare_zone_id"
 # Domain Configuration
 domain = "n8n.yourdomain.com"
 
-# SSH Configuration (paste your public key)
+# SSH Configuration (paste content from id_rsa.pub)
 ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2E..."
 
 # Server Configuration
@@ -183,6 +185,8 @@ n8n-setup/
 ├── .env.example                  # Local env template
 ├── docker-compose.yml            # Local development stack
 ├── README.md                     # This file
+├── id_rsa                        # SSH private key (git-ignored)
+├── id_rsa.pub                    # SSH public key (git-ignored)
 │
 ├── terraform/
 │   ├── provider.tf               # Terraform providers
@@ -212,15 +216,17 @@ n8n-setup/
 cd terraform
 terraform output server_ip
 
-# SSH to server
-ssh root@<server_ip>
+# SSH to server (using the SSH key from repo root)
+ssh -i id_rsa root@<server_ip>
 ```
+
+**Note**: The deploy script automatically uses the `id_rsa` key from the repo root. For manual SSH access, use the `-i id_rsa` flag as shown above.
 
 ### View Logs
 
 ```bash
 # SSH to server first
-ssh root@<server_ip>
+ssh -i id_rsa root@<server_ip>
 
 # View all logs
 docker compose logs -f
@@ -235,7 +241,7 @@ docker compose logs -f caddy
 
 ```bash
 # SSH to server
-ssh root@<server_ip>
+ssh -i id_rsa root@<server_ip>
 
 # Pull latest images
 cd /root
@@ -249,7 +255,7 @@ docker compose up -d
 
 ```bash
 # SSH to server
-ssh root@<server_ip>
+ssh -i id_rsa root@<server_ip>
 
 # Run backup script
 /root/backup.sh
@@ -261,7 +267,7 @@ Automated backups run daily at 2 AM via cron.
 
 ```bash
 # SSH to server
-ssh root@<server_ip>
+ssh -i id_rsa root@<server_ip>
 
 # Stop n8n
 docker compose stop n8n
@@ -319,12 +325,15 @@ docker compose start n8n
 
 ### Cannot SSH to server
 
-**Issue**: Connection timeout
+**Issue**: Connection timeout or "Permission denied"
 
 **Solution**:
-- Wait 2-3 minutes after deployment
+- Wait 2-3 minutes after deployment for server to initialize
+- Verify you're using the correct SSH key: `ssh -i id_rsa root@<server_ip>`
+- Check SSH key permissions: `ls -la id_rsa` (should be `-rw-------` / 600)
+- Fix permissions if needed: `chmod 600 id_rsa`
+- Verify the public key in `terraform.tfvars` matches `id_rsa.pub`: `cat id_rsa.pub`
 - Verify firewall allows port 22: `cd terraform && terraform show | grep firewall`
-- Check correct SSH key is used
 
 ### SSL certificate not provisioning
 
@@ -342,7 +351,7 @@ docker compose start n8n
 **Solution**:
 ```bash
 # SSH to server
-ssh root@<server_ip>
+ssh -i id_rsa root@<server_ip>
 
 # Check logs
 docker compose logs n8n
@@ -424,7 +433,7 @@ terraform destroy                 # Destroy infrastructure
 terraform output                  # Show outputs
 
 # Production management
-ssh root@<ip>                     # SSH to server
+ssh -i id_rsa root@<ip>           # SSH to server
 docker compose ps                 # Check status
 docker compose logs -f            # View logs
 docker compose pull && docker compose up -d  # Update

@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Get script directory and repo root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SSH_KEY_PATH="${REPO_ROOT}/id_rsa"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -18,6 +23,29 @@ log_warn() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check if SSH key exists and has correct permissions
+check_ssh_key() {
+    log_info "Checking SSH key..."
+    
+    if [ ! -f "$SSH_KEY_PATH" ]; then
+        log_error "SSH private key not found at: $SSH_KEY_PATH"
+        log_info "Please ensure you have placed your SSH private key (id_rsa) in the repo root"
+        log_info "The public key (id_rsa.pub) should also be present"
+        exit 1
+    fi
+    
+    # Check permissions (should be 600)
+    local perms=$(stat -f "%OLp" "$SSH_KEY_PATH" 2>/dev/null || stat -c "%a" "$SSH_KEY_PATH" 2>/dev/null)
+    if [ "$perms" != "600" ]; then
+        log_warn "SSH key has incorrect permissions: $perms (should be 600)"
+        log_info "Fixing permissions..."
+        chmod 600 "$SSH_KEY_PATH"
+        log_info "Permissions fixed"
+    fi
+    
+    log_info "SSH key found and verified"
 }
 
 # Check if required commands are available
@@ -93,7 +121,7 @@ wait_for_server() {
     log_info "Waiting for server to be ready..."
     
     while [ $attempt -lt $max_attempts ]; do
-        if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@"$server_ip" "echo 'Server is ready'" &> /dev/null; then
+        if ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@"$server_ip" "echo 'Server is ready'" &> /dev/null; then
             log_info "Server is ready!"
             return 0
         fi
@@ -115,10 +143,10 @@ deploy_to_server() {
     
     # Wait for cloud-init to complete
     log_info "Waiting for cloud-init to complete (this may take a few minutes)..."
-    ssh -o StrictHostKeyChecking=no root@"$server_ip" "cloud-init status --wait" || true
+    ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no root@"$server_ip" "cloud-init status --wait" || true
     
     log_info "Checking Docker services..."
-    ssh -o StrictHostKeyChecking=no root@"$server_ip" "docker ps"
+    ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no root@"$server_ip" "docker ps"
     
     log_info "Deployment completed!"
 }
@@ -147,6 +175,7 @@ main() {
     log_info "Starting deployment..."
     
     check_requirements
+    check_ssh_key
     
     # Check if terraform.tfvars exists
     if [ ! -f terraform/terraform.tfvars ]; then
