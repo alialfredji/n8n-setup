@@ -64,6 +64,11 @@ check_requirements() {
         missing=1
     fi
     
+    if [ -z "${GHCR_USER:-}" ] || [ -z "${GHCR_TOKEN:-}" ]; then
+        log_error "GHCR_USER and GHCR_TOKEN env vars must be set for GHCR image pull"
+        missing=1
+    fi
+    
     if [ $missing -eq 1 ]; then
         log_error "Please install missing requirements"
         exit 1
@@ -144,6 +149,14 @@ deploy_to_server() {
     # Wait for cloud-init to complete
     log_info "Waiting for cloud-init to complete (this may take a few minutes)..."
     ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no root@"$server_ip" "cloud-init status --wait" || true
+    
+    log_info "Logging in to GHCR on server..."
+    ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no root@"$server_ip" \
+        "echo \"${GHCR_TOKEN}\" | docker login ghcr.io -u ${GHCR_USER} --password-stdin"
+    
+    log_info "Pulling linkedin-analytics image..."
+    ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no root@"$server_ip" \
+        "docker pull ghcr.io/alialfredji/linkedin-analytics:latest"
     
     log_info "Checking Docker services..."
     ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no root@"$server_ip" "docker ps"

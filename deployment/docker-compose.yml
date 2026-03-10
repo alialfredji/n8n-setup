@@ -60,6 +60,24 @@ services:
       postgres:
         condition: service_healthy
 
+  linkedin-analytics:
+    image: ghcr.io/alialfredji/linkedin-analytics:latest
+    container_name: linkedin-analytics
+    restart: unless-stopped
+    environment:
+      - DB_PATH=/data/linkedin.db
+      - DASHBOARD_PATH=/data/dashboard.html
+      - COOKIE_PATH=/data/cookies.json
+      - LINKEDIN_USERNAME=${LINKEDIN_USERNAME}
+      - LINKEDIN_PASSWORD=${LINKEDIN_PASSWORD}
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-0 6 * * *}
+    volumes:
+      - linkedin_data:/data
+    networks:
+      - app-network
+    depends_on:
+      - caddy
+
 networks:
   app-network:
     driver: bridge
@@ -69,4 +87,5 @@ volumes:
   caddy_config:
   postgres_data:
   n8n_data:
+  linkedin_data:
 
