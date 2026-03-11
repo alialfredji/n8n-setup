@@ -1,7 +1,7 @@
-{$DOMAIN} {
+n8n.alfredji.com {
     reverse_proxy n8n:5678
 }
 
-linkedin.alialfredji.com {
+linkedin.alfredji.com {
     reverse_proxy linkedin-analytics:8080
 }
